@@ -17,9 +17,17 @@ export default async function handler(req, res) {
         cancel_url: 'https://factoryoutletshoes.store/cart'
       }),
     });
+    
     const paymentData = await volzixResponse.json();
+    
+    if (!volzixResponse.ok) {
+      console.error('Volzix API Error Response:', paymentData);
+      return res.status(500).json({ error: paymentData.message || 'Volzix rejection' });
+    }
+
     res.status(200).json({ redirectUrl: paymentData.payment_url });
   } catch (error) {
-    res.status(500).json({ error: 'Failed' });
+    console.error('Server catch block error:', error);
+    res.status(500).json({ error: error.message });
   }
 }
