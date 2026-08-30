@@ -1,46 +1,62 @@
+import crypto from 'crypto';
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
-  const { amount, orderId } = req.body;
-  const safeAmount = amount || '100.00';
-  const safeOrderId = orderId || 'ORD-' + Math.floor(Math.random() * 100000);
+  const { amount, orderId, email } = req.body;
+  const merchantMid = process.env.VOLZIX_MID;
+  const secretKey = process.env.VOLZIX_SECRET_KEY;
+
+  if (!merchantMid || !secretKey) {
+    return res.status(500).json({ error: 'Volzix credentials not configured on server' });
+  }
+
+  // Format amount to exactly 2 decimal places as required by Volzix specs
+  const formattedAmount = Number(amount || 100).toFixed(2);
+  const webId = orderId || 'ORD-' + Math.floor(Math.random() * 1000000);
+  const timestamp = Math.floor(Date.now() / 1000);
+  const payerEmail = email || 'customer@factoryoutletshoes.store';
+  const returnUrl = 'https://factoryoutletshoes.store/success';
+
+  // Build sign string for Step 1: /auth/
+  // Formula: merchant_mid|amount|currency|web_id|payer_email|timestamp
+  const signString = `${merchantMid}|${formattedAmount}|PKR|${webId}|${payerEmail}|${timestamp}`;
+  const signature = crypto.createHmac('sha256', secretKey).update(signString).digest('hex');
 
   try {
-    const response = await fetch('https://api.volzix.com/v1/checkout', {
+    // Note the trailing slash required by Volzix endpoints
+    const response = await fetch('https://volzix.com/auth/', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.VOLZIX_SECRET_KEY || ''}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        merchant_id: process.env.VOLZIX_MID || '',
-        amount: safeAmount,
+        merchant_mid: merchantMid,
+        amount: Number(formattedAmount),
         currency: 'PKR',
-        order_reference: safeOrderId,
-        success_url: `https://checkout.factoryoutletshoes.store/success?orderId=${safeOrderId}&amount=${safeAmount}`,
-        cancel_url: 'https://factoryoutletshoes.store/cart'
+        payer_email: payerEmail,
+        web_id: webId,
+        return: returnUrl,
+        timestamp: timestamp,
+        signature: signature,
       }),
     });
 
     const data = await response.json().catch(() => ({}));
 
-    // If Volzix responds with a valid payment link, redirect there
-    if (response.ok && data.payment_url) {
-      return res.status(200).json({ redirectUrl: data.payment_url });
+    if (!response.ok) {
+      console.error('Volzix API Error:', data);
+      return res.status(500).json({ error: data.error || 'Failed to initialize Volzix payment intent' });
     }
 
-    // Fallback redirect directly to your success page if gateway keys are pending
-    return res.status(200).json({ 
-      redirectUrl: `https://checkout.factoryoutletshoes.store/success?orderId=${safeOrderId}&amount=${safeAmount}` 
-    });
+    // Return the hosted checkout payment_url or flow_id based payment page
+    const paymentUrl = data.payment_url || `https://volzix.com/pay/${data.flow_id}`;
+    return res.status(200).json({ redirectUrl: paymentUrl });
 
   } catch (err) {
-    console.error('Checkout error:', err);
-    // Graceful redirect fallback so it never loops or gets stuck
-    return res.status(200).json({ 
-      redirectUrl: `https://checkout.factoryoutletshoes.store/success?orderId=${safeOrderId}&amount=${safeAmount}` 
-    });
+    console.error('Volzix Connection Error:', err);
+    return res.status(500).json({ error: err.message || 'Internal connection error' });
   }
 }
