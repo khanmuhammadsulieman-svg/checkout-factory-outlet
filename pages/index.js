@@ -2,8 +2,7 @@ useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const statusParam = params.get('status') || params.get('success');
     const failedParam = params.get('failed');
-    const currentOrderId = params.get('orderId'] || params.get('basket_id') || 'ORD-NEW';
-
+  const currentOrderId = params.get('orderId') || params.get('basket_id') || 'ORD-NEW';
     setOrderId(currentOrderId);
 
     if (statusParam === 'completed' || statusParam === 'success' || statusParam === '1') {
