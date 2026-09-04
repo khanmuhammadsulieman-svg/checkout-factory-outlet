@@ -18,9 +18,9 @@ export default async function handler(req, res) {
   const timestamp = Math.floor(Date.now() / 1000);
   const payerEmail = email || 'customer@factoryoutletshoes.store';
 
-  // Point callbacks back to your main website domains with status parameters
-  const returnUrl = `https://www.factoryoutletshoes.store/order-complete?orderId=${webId}&status=completed`;
-  const cancelUrl = `https://www.factoryoutletshoes.store/cart?orderId=${webId}&status=failed`;
+  // Point callbacks back to the checkout page with status parameters
+  const returnUrl = `https://www.factoryoutletshoes.store/checkout?orderId=${webId}&status=completed`;
+  const cancelUrl = `https://www.factoryoutletshoes.store/checkout?orderId=${webId}&status=failed`;
 
   const signString = `${merchantMid}|${formattedAmount}|PKR|${webId}|${payerEmail}|${timestamp}`;
   const signature = crypto.createHmac('sha256', secretKey).update(signString).digest('hex');
@@ -48,8 +48,6 @@ export default async function handler(req, res) {
     }
 
     let paymentUrl = data.payment_url || `https://volzix.com/pay/${data.flow_id}`;
-
-    // If specific wallet gateway was requested, you can append/route accordingly
     return res.status(200).json({ redirectUrl: paymentUrl });
 
   } catch (err) {
